@@ -55,7 +55,8 @@ class AudioRecorderManager extends ReactContextBaseJavaModule {
   private boolean isPaused = false;
   private Timer timer;
   private StopWatch stopWatch;
-  
+  private boolean meteringEnabled = false;
+
   private boolean isPauseResumeCapable = false;
   private Method pauseMethod = null;
   private Method resumeMethod = null;
@@ -65,7 +66,7 @@ class AudioRecorderManager extends ReactContextBaseJavaModule {
     super(reactContext);
     this.context = reactContext;
     stopWatch = new StopWatch();
-    
+
     isPauseResumeCapable = Build.VERSION.SDK_INT > Build.VERSION_CODES.M;
     if (isPauseResumeCapable) {
       try {
@@ -120,6 +121,7 @@ class AudioRecorderManager extends ReactContextBaseJavaModule {
       recorder.setAudioChannels(recordingSettings.getInt("Channels"));
       recorder.setAudioEncodingBitRate(recordingSettings.getInt("AudioEncodingBitRate"));
       recorder.setOutputFile(recordingPath);
+      meteringEnabled = recordingSettings.getBoolean("MeteringEnabled");
     }
     catch(final Exception e) {
       logAndRejectPromise(promise, "COULDNT_CONFIGURE_MEDIA_RECORDER" , "Make sure you've added RECORD_AUDIO permission to your AndroidManifest.xml file "+e.getMessage());
@@ -265,7 +267,7 @@ class AudioRecorderManager extends ReactContextBaseJavaModule {
         return;
       }
     }
-    
+
     isPaused = false;
     promise.resolve(null);
   }
@@ -278,6 +280,15 @@ class AudioRecorderManager extends ReactContextBaseJavaModule {
         if (!isPaused) {
           WritableMap body = Arguments.createMap();
           body.putDouble("currentTime", stopWatch.getTimeSeconds());
+          if(meteringEnabled){
+            int amplitude = recorder.getMaxAmplitude();
+            if (amplitude == 0) {
+                body.putInt("currentMetering", -160);//The first call - absolutely silence
+            } else {
+                //db = 20 * log10(peaks/ 32767); where 32767 - max value of amplitude in Android, peaks - current value
+                body.putInt("currentMetering", (int) (20 * Math.log(((double) amplitude) / 32767d)));
+            }
+          }
           sendEvent("recordingProgress", body);
         }
       }
